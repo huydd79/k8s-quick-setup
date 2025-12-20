@@ -2,6 +2,10 @@
 
 This repository provides a professional-grade automation suite to deploy and manage a Kubernetes cluster using **CRI-O** as the container runtime. The suite is fully integrated with Ingress (Traefik), Monitoring (Prometheus/Grafana), and the official K8s Dashboard.
 
+## 📬 Contact Me
+
+[![Email](https://img.shields.io/badge/Email-huyen_do_net-blue?style=for-the-badge&logo=gmail&logoColor=white)](mailto:huydd@huydo.net)
+
 ## 🏗️ Infrastructure Environment
 * **Operating System**: Red Hat Enterprise Linux (RHEL) 9.
 * **Hypervisor**: Proxmox VE 9.1.2.
