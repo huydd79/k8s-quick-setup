@@ -1,0 +1,31 @@
+# -----------------------------------------------------------------------------
+# ServersTransport: Instructs Traefik to trust Dashboard's internal self-signed certs
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: dashboard-transport
+  namespace: kubernetes-dashboard
+spec:
+  insecureSkipVerify: true
+
+---
+# -----------------------------------------------------------------------------
+# IngressRoute: Routing master.${DOMAIN_SUFFIX} to the Dashboard service
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kubernetes-dashboard-route
+  namespace: kubernetes-dashboard
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`master.${DOMAIN_SUFFIX}`)
+      kind: Rule
+      services:
+        - name: kubernetes-dashboard
+          port: 443
+          serversTransport: dashboard-transport
+  tls: {}

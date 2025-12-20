@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: traefik-dashboard-auth
+  namespace: traefik-v2
+type: Opaque
+stringData:
+  # Hashed for admin:admin123
+  users: "admin:$apr1$Onvg7w/h$TQII13KUpCdKWoNhnO63U1"
+  
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dashboard-auth
+  namespace: traefik-v2
+spec:
+  basicAuth:
+    secret: traefik-dashboard-auth
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard
+  namespace: traefik-v2
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`traefik.${DOMAIN_SUFFIX}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+      kind: Rule
+      services:
+        - name: api@internal
+          kind: TraefikService
+      middlewares:
+        - name: dashboard-auth
+  tls: {}
