@@ -68,10 +68,12 @@ Reset specific components or the entire cluster using the `u` prefixed scripts:
 | **Grafana** | `https://grafana.${DOMAIN_SUFFIX}` | `admin` / `admin` (change on first login) |
 
 ---
-## 📬 Contact Me
 
-[![Email](https://img.shields.io/badge/Email-huy_do_net-blue?style=for-the-badge&logo=gmail&logoColor=white)](mailto:huydd@huydo.net)
 ## 📝 Important Notes
 * **Permissions**: Must be executed as `root`.
 * **SSL**: Certificates are self-signed. Browser warnings are expected; select "Advanced" -> "Proceed".
 * **Metrics**: Metrics Server uses `--kubelet-insecure-tls` for local lab compatibility.
+
+## 📬 Contact Me
+
+[![Email](https://img.shields.io/badge/Email-huy_do_net-blue?style=for-the-badge&logo=gmail&logoColor=white)](mailto:huydd@huydo.net)
