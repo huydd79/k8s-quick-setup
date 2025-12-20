@@ -7,8 +7,8 @@
 READY=false
 
 # --- Infrastructure & Domain ---
-DOMAIN_SUFFIX="k8s.huydo.net"
-POD_CIDR="10.224.0.0/16"
+DOMAIN_SUFFIX="change.to.your.domain"    #<< Change to your domain
+POD_CIDR="10.224.0.0/16"                 #<< Change to your LAB CIDR
 
 # --- ANSI Colors ---
 GREEN='\033[32m'
