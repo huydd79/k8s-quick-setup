@@ -4,7 +4,7 @@
 # -----------------------------------------------------------------------------
 
 # Set to true once you have verified the settings below
-READY=true
+READY=faile
 
 # --- Infrastructure & Domain ---
 DOMAIN_SUFFIX="k8s.huydo.net"    #<< Change to your domain
