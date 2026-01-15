@@ -1,0 +1,45 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# Huy Do huy.do@cyberark.com
+# Date: 2024-06-10
+# -----------------------------------------------------------------------------
+# Global Configuration - Edit this file first!
+# -----------------------------------------------------------------------------
+
+READY=false
+
+# --- ANSI Colors ---
+GREEN='\033[32m'
+BLUE='\033[34m'
+YELLOW='\033[33m'
+RED='\033[31m'
+NC='\033[0m'
+
+# --- Safety Check Function ---
+check_ready() {
+    if [ "$READY" != "true" ]; then
+        echo -e "${RED}Error: Setup is not ready!${NC}"
+        echo -e "${YELLOW}Please edit '00.configure.sh' and set READY=true.${NC}"
+        exit 1
+    fi
+}
+
+# --- Kubernetes & ArgoCD Config ---
+ARGOCD_NAMESPACE="argocd"
+APP_NAMESPACE="production" # Nơi ứng dụng của bạn sẽ chạy
+ARGOCD_VERSION="stable"
+
+# --- GitLab Config ---
+# Nếu dùng Lab nội bộ, thay bằng IP hoặc domain local của bạn
+GITLAB_URL="https://gitlab.com" 
+GITLAB_USER="YOUR-GITLAB-USER"
+GITLAB_TOKEN="YOUR_GITLAB-TOKEN" # Cần quyền read_repository
+GITLAB_REPO_URL="https://gitlab.com/<YOUR-GITLAB-USER>/yourrepo.git"
+
+# --- Infrastructure ---
+# Dùng để truy cập dashboard sau này
+DOMAIN="k8s.huydo.net"
+
+
+#Test token permission
+#GIT_CURL_VERBOSE=1 git ls-remote https://<YOUR-GITLAB-USER>:<YOUR-TOKEN>@gitlab.com/<YOUR-GITLAB-USER>/yourrepo.git

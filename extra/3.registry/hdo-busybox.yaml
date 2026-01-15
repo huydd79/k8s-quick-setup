@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hdo-busybox
+  namespace: default
+  labels:
+    app: hdo-busybox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hdo-busybox
+  template:
+    metadata:
+      labels:
+        app: hdo-busybox
+    spec:
+      imagePullSecrets:
+        - name: cybr-registry-key
+      containers:
+      - name: tools-container
+        image: registry.cybr.huydo.net/hdo-busybox:latest
+        command: ["/bin/sh", "-c", "sleep infinity"]
+        imagePullPolicy: Always
