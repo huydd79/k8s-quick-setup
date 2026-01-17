@@ -16,6 +16,7 @@ metadata:
   labels:
     argocd.argoproj.io/secret-type: repository # Label bắt buộc để ArgoCD nhận diện
 stringData:
+  name: "GitLab-Static-Repo"
   url: "$GITLAB_REPO_URL"
   username: "$GITLAB_USER"          # Username bạn vừa test ls-remote thành công
   password: "$GITLAB_TOKEN"    # Token glpat-sAcZu...
