@@ -15,7 +15,7 @@ else
     NC='\033[0m'
 fi
 
-REG_SERVER="registry.cybr.huydo.net"
+REG_SERVER="harbor.cybr.huydo.net"
 REG_EMAIL="admin@huydo.net"
 SECRET_NAME="cybr-registry-key"
 NAMESPACE="default"
