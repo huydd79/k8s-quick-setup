@@ -1,7 +1,7 @@
 #!/bin/bash
 # -----------------------------------------------------------------------------
 # Script: u1.clear.registry.secret.sh
-# Purpose: Delete Image Pull Secret for registry.cybr.huydo.net
+# Purpose: Delete Image Pull Secret for harbor.cybr.huydo.net
 # -----------------------------------------------------------------------------
 
 # Nạp các biến màu và cấu hình chung

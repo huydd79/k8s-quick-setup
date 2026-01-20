@@ -19,6 +19,6 @@ spec:
         - name: cybr-registry-key
       containers:
       - name: tools-container
-        image: registry.cybr.huydo.net/hdo-busybox:latest
+        image: harbor.cybr.huydo.net/hdo-lab01/hdo-busybox:latest
         command: ["/bin/sh", "-c", "sleep infinity"]
         imagePullPolicy: Always

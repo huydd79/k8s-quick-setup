@@ -1,0 +1,81 @@
+
+------../yaml/conjur-eso-jwt-policy.yaml------
+- !policy
+  id: jwt-apps/k8s
+  owner: !group k8s-admins
+  body:
+  - !host
+    id: system:serviceaccount:argocd:k8s-eso
+    annotations:
+      authn-jwt/k8s/kubernetes.io/namespace: argocd
+      authn-jwt/k8s/kubernetes.io/serviceaccount/name: k8s-eso
+
+- !grant
+  roles:
+  - !group conjur/authn-jwt/k8s/apps
+  - !layer test/test_hosts
+  members:
+  - !host jwt-apps/k8s/system:serviceaccount:argocd:k8s-eso
+--------------
+------../yaml/conjur-external-secret.yaml------
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: gitlab-repo-conjur-sync
+spec:
+  refreshInterval: 55s
+  secretStoreRef:
+    name: conjur
+    kind: SecretStore
+  target:
+    name: gitlab-repo-creds-conjur
+    template:
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        type: git
+        url: "{GITLAB_REPO_URL}"
+        project: "{APP_NAMESPACE}"
+        forceHttpBasicAuth: "true"
+        insecure: "true"
+        username: "{{ .user }}"
+        password: "{{ .pass }}"
+  data:
+  - secretKey: user
+    remoteRef:
+      key: "{PATH_USER}"
+  - secretKey: pass
+    remoteRef:
+      key: "{PATH_TOKEN}"--------------
+------../yaml/conjur-secret-store-jwt.yaml------
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-eso
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: conjur
+spec:
+  provider:
+    conjur:
+      url: {CONJUR_URL}
+      caProvider:
+        type: ConfigMap
+        name: conjur-cm
+        key: CONJUR_SSL_CERTIFICATE
+      auth:
+        jwt:
+          account: {CONJUR_ACCOUNT}
+          # The authn-jwt service ID
+          serviceID: k8s
+          # Service account to retrieve JWT token for
+          serviceAccountRef:
+            name: k8s-eso
+            # [OPTIONAL] audiences to include in JWT token
+            audiences:
+              - cybrdemo
+--------------

@@ -65,7 +65,7 @@ kubectl create secret docker-registry $SECRET_NAME \
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Success: Secret for created successfully!${NC}"
     echo -e "${GREEN}You can run below command to test registry auth:${NC}"
-    echo -e "${YELLOW}crictl pull --creds \"${REG_USER}:<YOUR_PASSWORD>\" registry.cybr.huydo.net/hdo-busybox:latest${NC}"
+    echo -e "${YELLOW}crictl pull --creds \"${REG_USER}:<YOUR_PASSWORD>\" harbor.cybr.huydo.net/hdo-busybox:latest${NC}"
 else
     echo -e "${RED}❌ Error: Failed to create secret.${NC}"
     exit 1

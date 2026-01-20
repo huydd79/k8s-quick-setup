@@ -1,0 +1,349 @@
+
+------../00.config.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# Global Configuration - Edit this file first!
+# Author: Huy Do (huy.do@cyberark.com)
+# -----------------------------------------------------------------------------
+
+READY=true
+
+# --- ANSI Colors ---
+GREEN='\033[32m'
+BLUE='\033[34m'
+YELLOW='\033[33m'
+RED='\033[31m'
+NC='\033[0m'
+
+# --- Safety Check Function ---
+check_ready() {
+    if [ "$READY" != "true" ]; then
+        echo -e "${RED}Error: Setup is not ready!${NC}"
+        echo -e "${YELLOW}Please edit '00.config.sh' and set READY=true.${NC}"
+        exit 1
+    fi
+}
+
+# --- Kubernetes Namespaces ---
+ARGOCD_NAMESPACE="argocd"
+ESO_NAMESPACE="external-secrets"
+APP_NAMESPACE="default" 
+
+# --- Conjur Enterprise Config ---
+CONJUR_URL="https://conjur.cybr.huydo.net"
+CONJUR_ACCOUNT="CYBR"
+
+# --- Conjur Variables Paths for Gitlab token ---
+PATH_USER="pcloud/conjur-sync/devops/gitlab_argocd_token/username"
+PATH_TOKEN="pcloud/conjur-sync/devops/gitlab_argocd_token/password"
+
+# --- Conjur Variables Paths for Docker registry ---
+REGISTRY_USER_PATH="pcloud/conjur-sync/devops/registry/username"
+REGISTRY_PASS_PATH="pcloud/conjur-sync/devops/registry/password"
+
+# --- GitLab & ArgoCD Repo Config ---
+GITLAB_REPO_URL="https://gitlab.com/huydd79/testgitops-conjur.git"
+
+# --- Docker Registry Config ---
+REGISTRY="registry.cybr.huydo.net"
+LAB_DOMAIN="cybr.huydo.net"--------------
+------../01.install.eso.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# 01.install-eso.sh - Force Install/Upgrade ESO with CRDs
+# -----------------------------------------------------------------------------
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Ensuring Helm is ready...${NC}"
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+
+echo -e "${BLUE}Step 2: Deploying/Upgrading External Secrets Operator...${NC}"
+# Sử dụng upgrade --install và ép installCRDs=true
+helm upgrade --install external-secrets external-secrets/external-secrets \
+    -n "$ESO_NAMESPACE" \
+    --create-namespace \
+    --set installCRDs=true \
+    --wait
+
+echo -e "${GREEN}ESO has been deployed/upgraded with CRDs.${NC}"
+
+echo -e "${BLUE}Step 3: Verifying CRDs presence...${NC}"
+kubectl get crd | grep external-secrets--------------
+------../02.load.conjur.policy.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# 02.load-conjur-policy.sh - Load Conjur Policies for Kubernetes Authentication
+# Author: Huy Do (huy.do@cyberark.com)
+# Date: 2026-01-17
+# -----------------------------------------------------------------------------
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Loading Conjur Policies for JWT authentication...${NC}"
+
+# Load the policy file into Conjur root branch to define K8s Authenticator and Hosts
+# The variables paths are expected to be created/synced by CyberArk Vault Synchronizer
+if conjur policy load -f ./yaml/conjur-eso-jwt-policy.yaml -b root; then
+    echo -e "${GREEN}Policy loaded successfully.${NC}"
+else
+    echo -e "${RED}Error: Failed to load policy. Please check Conjur CLI session.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Conjur infrastructure is ready for secret synchronization.${NC}"--------------
+------../03.create.secret.store.argocd.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# 03.create-secret-store.sh - Configure Conjur SecretStore in ArgoCD namespace
+# Author: Huy Do (huy.do@cyberark.com)
+# -----------------------------------------------------------------------------
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Extracting Conjur SSL Certificate...${NC}"
+CONJUR_CERT=$(openssl s_client -showcerts -connect conjur.cybr.huydo.net:443 </dev/null 2>/dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p')
+
+if [ -z "$CONJUR_CERT" ]; then
+    echo -e "${RED}Error: Failed to fetch SSL certificate.${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}Step 2: Creating ConfigMap in $ARGOCD_NAMESPACE...${NC}"
+kubectl -n "$ARGOCD_NAMESPACE" create configmap conjur-cm \
+    --from-literal "CONJUR_SSL_CERTIFICATE=${CONJUR_CERT}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+echo -e "${BLUE}Step 3: Preparing SecretStore manifest...${NC}"
+YML_TEMP="/tmp/conjur-jwt-store.yaml"
+API_VERSION=$(kubectl api-resources | grep -w "secretstores" | awk '{print $3}')
+
+# Apply transformations
+sed "s|external-secrets.io/v1|$API_VERSION|g" ./yaml/conjur-secret-store-jwt.yaml | \
+sed "s|{CONJUR_URL}|$CONJUR_URL|g" | \
+sed "s|{CONJUR_ACCOUNT}|$CONJUR_ACCOUNT|g" > "$YML_TEMP"
+
+echo -e "${BLUE}Step 4: Applying SA and SecretStore to $ARGOCD_NAMESPACE...${NC}"
+kubectl apply -n "$ARGOCD_NAMESPACE" -f "$YML_TEMP"
+
+rm -f "$YML_TEMP"
+kubectl -n "$ARGOCD_NAMESPACE" get secretstore conjur--------------
+------../04.deploy.eso.argocd.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# 04.deploy-eso-argocd.sh - Create ArgoCD Repo Secret backed by Conjur
+# -----------------------------------------------------------------------------
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Preparing full ArgoCD Repo manifest...${NC}"
+YML_TEMP="/tmp/eso-argocd-full.yaml"
+API_VERSION=$(kubectl api-resources | grep -w "externalsecrets" | awk '{print $3}')
+
+# Replace all placeholders including ArgoCD specific parameters
+sed "s|external-secrets.io/v1|$API_VERSION|g" ./yaml/conjur-external-secret.yaml | \
+sed "s|{GITLAB_REPO_URL}|$GITLAB_REPO_URL|g" | \
+sed "s|{APP_NAMESPACE}|$APP_NAMESPACE|g" | \
+sed "s|{PATH_USER}|$PATH_USER|g" | \
+sed "s|{PATH_TOKEN}|$PATH_TOKEN|g" > "$YML_TEMP"
+
+echo -e "${BLUE}Step 2: Applying ExternalSecret to $ARGOCD_NAMESPACE...${NC}"
+kubectl apply -f "$YML_TEMP" -n "$ARGOCD_NAMESPACE"
+
+echo -e "${GREEN}Waiting for synchronization (10s)...${NC}"
+sleep 10
+kubectl get externalsecret gitlab-repo-conjur-sync -n "$ARGOCD_NAMESPACE"
+
+rm -f "$YML_TEMP"--------------
+------../05.config.argocd.app.sh------
+#!/bin/bash
+# -------------------------------------------------------------------------------
+# Script: 07.config.app.sh
+# Description: Deploy webapp03 using ArgoCD Application via GitOps
+# Author: Huy Do (huydd79)
+# -------------------------------------------------------------------------------
+
+# Load global configurations
+source ./00.config.sh
+
+check_ready
+
+# Application variables
+APP_NAME="webapp03"
+REPO_PATH="apps/webapp03"
+DEST_NAMESPACE="default"
+
+echo -e "${BLUE}Cleaning up existing Application if any...${NC}"
+kubectl delete app $APP_NAME -n $ARGOCD_NAMESPACE --ignore-not-found
+
+echo -e "${BLUE}Creating new ArgoCD Application: ${YELLOW}$APP_NAME${NC}..."
+
+# Apply ArgoCD Application Manifest
+cat <<EOF | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: $APP_NAME
+  namespace: $ARGOCD_NAMESPACE
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: '$GITLAB_REPO_URL'
+    targetRevision: HEAD
+    path: $REPO_PATH
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: $DEST_NAMESPACE
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - ApplyOutOfSyncOnly=true
+EOF
+
+echo -e "${GREEN}Deployment command sent successfully!${NC}"
+echo -e "${GREEN}Please check the ArgoCD Dashboard to monitor the sync status.${NC}"--------------
+------../06.create.secret.store.registry.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# 06.create.secret.store.registry.sh - Setup Conjur SecretStore in App Namespace
+# Author: Huy Do (huy.do@cyberark.com)
+# -----------------------------------------------------------------------------
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Extracting Conjur SSL Certificate...${NC}"
+# Extract cert from Conjur URL defined in 00.config.sh
+CONJUR_CERT=$(openssl s_client -showcerts -connect conjur.cybr.huydo.net:443 </dev/null 2>/dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p')
+
+if [ -z "$CONJUR_CERT" ]; then
+    echo -e "${RED}Error: Failed to fetch SSL certificate from $CONJUR_URL${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}Step 2: Creating ConfigMap 'conjur-cm' in $APP_NAMESPACE...${NC}"
+# Ensure the namespace exists before applying
+kubectl create namespace "$APP_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n "$APP_NAMESPACE" create configmap conjur-cm \
+    --from-literal "CONJUR_SSL_CERTIFICATE=${CONJUR_CERT}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+echo -e "${BLUE}Step 3: Preparing and Applying SecretStore manifest...${NC}"
+YML_TEMP="/tmp/conjur-registry-store.yaml"
+
+# Replace placeholders in the base SecretStore template
+sed "s|{CONJUR_URL}|$CONJUR_URL|g" ./yaml/conjur-secret-store-jwt.yaml | \
+sed "s|{CONJUR_ACCOUNT}|$CONJUR_ACCOUNT|g" > "$YML_TEMP"
+
+# Apply specifically to the application namespace
+kubectl apply -n "$APP_NAMESPACE" -f "$YML_TEMP"
+
+echo -e "${GREEN}Step 4: Verification in $APP_NAMESPACE...${NC}"
+rm -f "$YML_TEMP"
+kubectl -n "$APP_NAMESPACE" get secretstore conjur--------------
+------../07.deploy.eso.registry.sh------
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# 07.deploy.eso.registry.sh - Create Registry Pull Secret backed by Conjur
+# Author: Huy Do (huy.do@cyberark.com)
+# -----------------------------------------------------------------------------
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Preparing Registry ExternalSecret manifest...${NC}"
+YML_TEMP="/tmp/eso-registry-full.yaml"
+
+# Determine the API version for ExternalSecrets
+API_VERSION=$(kubectl api-resources | grep -w "externalsecrets" | awk '{print $3}')
+
+# Replace all placeholders using 'sed'
+# Using '|' as a delimiter to safely handle paths with slashes
+sed "s|external-secrets.io/v1|$API_VERSION|g" ./yaml/conjur-registry-secret.yaml | \
+sed "s|{APP_NAMESPACE}|$APP_NAMESPACE|g" | \
+sed "s|{REGISTRY}|$REGISTRY|g" | \
+sed "s|{REGISTRY_USER_PATH}|$REGISTRY_USER_PATH|g" | \
+sed "s|{REGISTRY_PASS_PATH}|$REGISTRY_PASS_PATH|g" > "$YML_TEMP"
+
+echo -e "${BLUE}Step 2: Applying ExternalSecret to $APP_NAMESPACE...${NC}"
+kubectl apply -f "$YML_TEMP" -n "$APP_NAMESPACE"
+
+echo -e "${GREEN}Waiting for synchronization (10s)...${NC}"
+sleep 10
+
+# Verify the ExternalSecret status
+kubectl get externalsecret registry-conjur-sync -n "$APP_NAMESPACE"
+
+# Cleanup temporary file
+rm -f "$YML_TEMP"--------------
+------../09.uninstall.sh------
+#!/bin/bash
+source ./00.config.sh
+check_ready
+
+echo -e "${RED}Warning: This will delete ESO resources and the Operator.${NC}"
+read -p "Are you sure? (y/n) " -n 1 -r
+echo
+[[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
+
+echo -e "${BLUE}Step 1: Deleting ArgoCD-specific ESO resources...${NC}"
+kubectl delete externalsecret gitlab-repo-conjur-sync -n "$ARGOCD_NAMESPACE" --ignore-not-found
+kubectl delete secretstore conjur -n "$ARGOCD_NAMESPACE" --ignore-not-found
+kubectl delete secret gitlab-repo-creds-conjur -n "$ARGOCD_NAMESPACE" --ignore-not-found
+
+echo -e "${BLUE}Step 2: Uninstalling ESO Operator (Helm)...${NC}"
+helm uninstall external-secrets -n "$ESO_NAMESPACE" --ignore-not-found
+kubectl delete namespace "$ESO_NAMESPACE" --ignore-not-found
+
+echo -e "${GREEN}Cleanup complete.${NC}"--------------
+------../z41.troubleshooting.eso.argocd.sh------
+#!/bin/bash
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Checking ExternalSecret status in $ARGOCD_NAMESPACE...${NC}"
+kubectl -n "$ARGOCD_NAMESPACE" describe externalsecret gitlab-repo-conjur-sync | grep -A 10 "Events:"
+
+echo -e "${BLUE}Step 2: Checking ESO Controller logs...${NC}"
+kubectl -n "$ESO_NAMESPACE" logs -l app.kubernetes.io/name=external-secrets --tail=50
+
+echo -e "${BLUE}Step 3: Checking SecretStore status in $ARGOCD_NAMESPACE...${NC}"
+kubectl -n "$ARGOCD_NAMESPACE" get secretstore conjur -o wide--------------
+------../z42.troubleshooting.eso.registry.sh------
+#!/bin/bash
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Step 1: Checking ExternalSecret status in $APP_NAMESPACE...${NC}"
+kubectl -n "$APP_NAMESPACE" describe externalsecret gitlab-repo-conjur-sync | grep -A 10 "Events:"
+
+echo -e "${BLUE}Step 2: Checking ESO Controller logs...${NC}"
+kubectl -n "$ESO_NAMESPACE" logs -l app.kubernetes.io/name=external-secrets --tail=50
+
+echo -e "${BLUE}Step 3: Checking SecretStore status in $APP_NAMESPACE...${NC}"
+kubectl -n "$APP_NAMESPACE" get secretstore conjur -o wide--------------
+------../z43.verify.secret.sh------
+#!/bin/bash
+source ./00.config.sh
+check_ready
+
+echo -e "${BLUE}Inspecting the synced Kubernetes Secret: gitlab-repo-creds-conjur...${NC}"
+kubectl -n "$ARGOCD_NAMESPACE" get secret gitlab-repo-creds-conjur --show-labels
+
+echo -e "${BLUE}Verifying Data Fields (Decoded):${NC}"
+USER_VAL=$(kubectl -n "$ARGOCD_NAMESPACE" get secret gitlab-repo-creds-conjur -o jsonpath="{.data.username}" | base64 --decode)
+PASS_VAL=$(kubectl -n "$ARGOCD_NAMESPACE" get secret gitlab-repo-creds-conjur -o jsonpath="{.data.password}" | base64 --decode)
+
+echo -e "Username: $USER_VAL"
+echo -e "Password: ${PASS_VAL:0:4}******"
+
+if [ ! -z "$PASS_VAL" ]; then
+    echo -e "${GREEN}SUCCESS: Secret is correctly populated from Conjur.${NC}"
+else
+    echo -e "${RED}ERROR: Secret data is empty.${NC}"
+fi--------------

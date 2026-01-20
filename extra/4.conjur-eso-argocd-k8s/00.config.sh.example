@@ -1,0 +1,47 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# Global Configuration - Edit this file first!
+# Author: Huy Do (huy.do@cyberark.com)
+# -----------------------------------------------------------------------------
+
+READY=true
+
+# --- ANSI Colors ---
+GREEN='\033[32m'
+BLUE='\033[34m'
+YELLOW='\033[33m'
+RED='\033[31m'
+NC='\033[0m'
+
+# --- Safety Check Function ---
+check_ready() {
+    if [ "$READY" != "true" ]; then
+        echo -e "${RED}Error: Setup is not ready!${NC}"
+        echo -e "${YELLOW}Please edit '00.config.sh' and set READY=true.${NC}"
+        exit 1
+    fi
+}
+
+# --- Kubernetes Namespaces ---
+ARGOCD_NAMESPACE="argocd"
+ESO_NAMESPACE="external-secrets"
+APP_NAMESPACE="default" 
+
+# --- Conjur Enterprise Config ---
+CONJUR_URL="https://conjur.cybr.huydo.net"
+CONJUR_ACCOUNT="CYBR"
+
+# --- Conjur Variables Paths for Gitlab token ---
+PATH_USER="pcloud/conjur-sync/devops/gitlab_argocd_token/username"
+PATH_TOKEN="pcloud/conjur-sync/devops/gitlab_argocd_token/password"
+
+# --- Conjur Variables Paths for Docker registry ---
+REGISTRY_USER_PATH="pcloud/conjur-sync/devops/registry/username"
+REGISTRY_PASS_PATH="pcloud/conjur-sync/devops/registry/password"
+
+# --- GitLab & ArgoCD Repo Config ---
+GITLAB_REPO_URL="https://gitlab.com/huydd79/testgitops-conjur.git"
+
+# --- Docker Registry Config ---
+REGISTRY="harbor.cybr.huydo.net"
+LAB_DOMAIN="cybr.huydo.net"

@@ -1,0 +1,34 @@
+# -----------------------------------------------------------------------------
+# Conjur Policy: Define K8s Identity and Permissions
+# -----------------------------------------------------------------------------
+- !policy
+  id: jwt-apps/k8s
+  owner: !group k8s-admins
+  body:
+    - !host
+      id: system:serviceaccount:argocd:k8s-eso
+      annotations:
+        authn-jwt/k8s/kubernetes.io/namespace: argocd
+        authn-jwt/k8s/kubernetes.io/serviceaccount/name: k8s-eso
+    - !host
+      id: system:serviceaccount:default:k8s-eso
+      annotations:
+        authn-jwt/k8s/kubernetes.io/namespace: default
+        authn-jwt/k8s/kubernetes.io/serviceaccount/name: k8s-eso
+
+- !grant
+  roles:
+    - !group conjur/authn-jwt/k8s/apps
+    - !layer test/test_hosts
+  members:
+    - !host jwt-apps/k8s/system:serviceaccount:argocd:k8s-eso
+    - !host jwt-apps/k8s/system:serviceaccount:default:k8s-eso
+
+# If layer test/test_hosts doesn't have permission, adding belo
+# Permission for the host to fetch GitLab secrets from PCloud paths
+#- !permit
+#  role: !host jwt-apps/k8s/system:serviceaccount:argocd:k8s-eso
+#  privileges: [ read, execute ]
+#  resources:
+#    - !variable pcloud/conjur-sync/devops/gitlab_argocd_token/username
+#    - !variable pcloud/conjur-sync/devops/gitlab_argocd_token/password
